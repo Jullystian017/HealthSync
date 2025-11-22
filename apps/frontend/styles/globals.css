@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: 47 174 143;
+  --color-slate-950: 15 23 42;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  @apply bg-white text-slate-900 antialiased;
+}
+
+.container-padded {
+  @apply container mx-auto px-4 md:px-8;
+}
+
+.bg-hero {
+  background: radial-gradient(1200px 400px at 10% -10%, rgba(47,174,143,0.12), transparent),
+              radial-gradient(800px 300px at 90% 0%, rgba(15,23,42,0.10), transparent);
+}
+
+.shadow-soft {
+  box-shadow: 0 4px 20px rgba(15,23,42,0.08);
+}

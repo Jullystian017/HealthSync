@@ -1,0 +1,17 @@
+{
+  "name": "nutrisync-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/frontend",
+    "apps/backend"
+  ],
+  "scripts": {
+    "dev:frontend": "npm --workspace apps/frontend run dev",
+    "build:frontend": "npm --workspace apps/frontend run build",
+    "start:frontend": "npm --workspace apps/frontend run start",
+    "lint:frontend": "npm --workspace apps/frontend run lint",
+    "dev:backend": "npm --workspace apps/backend run dev",
+    "build:backend": "npm --workspace apps/backend run build",
+    "start:backend": "npm --workspace apps/backend run start"
+  }
+}

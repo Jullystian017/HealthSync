@@ -26,17 +26,102 @@ export default function RegisterPage() {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    if (data.user) {
-      // Depending on Supabase email confirmation settings, a link may be sent.
-      setInfo("Registration successful. Please check your email to verify your account.");
-      // Optionally redirect after a delay
-      // setTimeout(() => router.push("/login"), 1500);
+    
+    try {
+      // Get the current origin for the redirect URL
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const redirectUrl = `${origin}/auth/callback`;
+      
+      // Sign up the user with magic link
+      const { data, error } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+          emailRedirectTo: redirectUrl, // Redirect to callback after clicking magic link
+        }
+      });
+      
+      if (error) {
+        const msg = (error.message || "").toLowerCase();
+        const alreadyRegistered = msg.includes("already registered") || msg.includes("user already registered") || (error as any).status === 422;
+        if (alreadyRegistered) {
+          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+          if (signInData?.user && signInData.session) {
+            setLoading(false);
+            router.push("/dashboard");
+            return;
+          }
+          if (signInErr) {
+            const em = (signInErr.message || "").toLowerCase();
+            const unconfirmed = em.includes("not confirmed") || em.includes("email not confirmed");
+            if (unconfirmed) {
+              const { error: resendError } = await supabase.auth.resend({ type: "signup", email });
+              setLoading(false);
+              if (!resendError) {
+                setInfo("Email sudah terdaftar namun belum terverifikasi. Kami telah mengirim ulang email verifikasi.");
+                router.push(`/auth/pending?email=${encodeURIComponent(email)}`);
+                return;
+              }
+            }
+            setLoading(false);
+            setError("Email sudah terdaftar dan terverifikasi. Silakan login.");
+            return;
+          }
+          setLoading(false);
+          setError("Email sudah terdaftar dan terverifikasi. Silakan login.");
+          return;
+        }
+        setLoading(false);
+        setError(error.message);
+        return;
+      }
+      
+      if (data.user) {
+        // If identities array is empty or missing, user likely already exists
+        const u = data.user as any;
+        const identities = u?.identities;
+        const emailConfirmed = Boolean(u?.email_confirmed_at || u?.confirmed_at);
+
+        if (Array.isArray(identities) && identities.length > 0) {
+          setLoading(false);
+          // Show success message - user needs to check email and click magic link
+          setInfo("Registration successful! Please check your email and click the verification link to activate your account.");
+          router.push(`/auth/pending?email=${encodeURIComponent(email)}`);
+          return;
+        }
+
+        if (emailConfirmed) {
+          setLoading(false);
+          setError("Email sudah terdaftar dan terverifikasi. Silakan login.");
+          return;
+        }
+
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+        setLoading(false);
+        if (signInData?.user && signInData.session) {
+          router.push("/dashboard");
+          return;
+        }
+        if (signInErr) {
+          const em = (signInErr.message || "").toLowerCase();
+          const unconfirmed = em.includes("not confirmed") || em.includes("email not confirmed");
+          if (unconfirmed) {
+            const { error: resendError } = await supabase.auth.resend({ type: "signup", email });
+            if (!resendError) {
+              setInfo("Email sudah terdaftar namun belum terverifikasi. Kami telah mengirim ulang email verifikasi.");
+              router.push(`/auth/pending?email=${encodeURIComponent(email)}`);
+              return;
+            }
+          }
+        }
+        setError("Email sudah terdaftar dan terverifikasi. Silakan login.");
+      } else {
+        setLoading(false);
+        setError("Registration failed. Please try again.");
+      }
+    } catch (err: any) {
+      setLoading(false);
+      setError(err?.message || "An error occurred during registration");
     }
   };
 

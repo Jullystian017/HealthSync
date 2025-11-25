@@ -77,12 +77,14 @@ export default function LoginPage() {
 
               {/* Switch Sign In / Sign Up */}
               <div className="bg-white/0 rounded-full p-1 inline-flex border border-gray-200">
-                <button className="px-6 py-2 bg-blue-500 text-white rounded-full">
+             {/* Tetap sebagai tampilan aktif */}
+               <button className="px-6 py-2 bg-blue-500 text-white rounded-full">
                   Sign In
-                </button>
-                <button className="px-6 py-2 rounded-full text-gray-500">
-                  Sign Up
-                </button>
+               </button>
+             {/* Navigasi ke halaman Register */}
+              <Link href="/register" className="px-6 py-2 rounded-full text-gray-500 hover:bg-gray-50 transition-colors">
+                Sign Up
+              </Link>
               </div>
 
               {/* Form */}

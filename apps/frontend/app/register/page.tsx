@@ -1,166 +1,223 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
+import { supabase } from "../../lib/supabaseClient"; // Pastikan path ini benar
 import Link from "next/link";
-import { supabase } from "../../lib/supabaseClient";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
-import { Input } from "../../components/ui/input";
-import { Button } from "../../components/ui/button";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setInfo(null);
-    if (password !== confirm) {
-      setError("Passwords do not match");
+    setMessage(null);
+    setLoading(true);
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      setLoading(false);
       return;
     }
-    setLoading(true);
-    
-    try {
-      // Get the current origin for the redirect URL
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const redirectUrl = `${origin}/auth/callback`;
-      
-      // Sign up the user with magic link
-      const { data, error } = await supabase.auth.signUp({ 
-        email, 
-        password,
-        options: {
-          emailRedirectTo: redirectUrl, // Redirect to callback after clicking magic link
-        }
-      });
-      
-      if (error) {
-        const msg = (error.message || "").toLowerCase();
-        const alreadyRegistered = msg.includes("already registered") || msg.includes("user already registered") || (error as any).status === 422;
-        if (alreadyRegistered) {
-          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-          if (signInData?.user && signInData.session) {
-            setLoading(false);
-            router.push("/dashboard");
-            return;
-          }
-          if (signInErr) {
-            const em = (signInErr.message || "").toLowerCase();
-            const unconfirmed = em.includes("not confirmed") || em.includes("email not confirmed");
-            if (unconfirmed) {
-              const { error: resendError } = await supabase.auth.resend({ type: "signup", email });
-              setLoading(false);
-              if (!resendError) {
-                setInfo("Email sudah terdaftar namun belum terverifikasi. Kami telah mengirim ulang email verifikasi.");
-                router.push(`/auth/pending?email=${encodeURIComponent(email)}`);
-                return;
-              }
-            }
-            setLoading(false);
-            setError("Email sudah terdaftar dan terverifikasi. Silakan login.");
-            return;
-          }
-          setLoading(false);
-          setError("Email sudah terdaftar dan terverifikasi. Silakan login.");
-          return;
-        }
-        setLoading(false);
-        setError(error.message);
-        return;
-      }
-      
-      if (data.user) {
-        // If identities array is empty or missing, user likely already exists
-        const u = data.user as any;
-        const identities = u?.identities;
-        const emailConfirmed = Boolean(u?.email_confirmed_at || u?.confirmed_at);
 
-        if (Array.isArray(identities) && identities.length > 0) {
-          setLoading(false);
-          // Show success message - user needs to check email and click magic link
-          setInfo("Registration successful! Please check your email and click the verification link to activate your account.");
-          router.push(`/auth/pending?email=${encodeURIComponent(email)}`);
-          return;
-        }
+    // Menggunakan fungsi signUp untuk pendaftaran
+    const { data, error } = await supabase.auth.signUp({ 
+      email, 
+      password 
+    });
 
-        if (emailConfirmed) {
-          setLoading(false);
-          setError("Email sudah terdaftar dan terverifikasi. Silakan login.");
-          return;
-        }
+    setLoading(false);
 
-        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-        setLoading(false);
-        if (signInData?.user && signInData.session) {
-          router.push("/dashboard");
-          return;
-        }
-        if (signInErr) {
-          const em = (signInErr.message || "").toLowerCase();
-          const unconfirmed = em.includes("not confirmed") || em.includes("email not confirmed");
-          if (unconfirmed) {
-            const { error: resendError } = await supabase.auth.resend({ type: "signup", email });
-            if (!resendError) {
-              setInfo("Email sudah terdaftar namun belum terverifikasi. Kami telah mengirim ulang email verifikasi.");
-              router.push(`/auth/pending?email=${encodeURIComponent(email)}`);
-              return;
-            }
-          }
-        }
-        setError("Email sudah terdaftar dan terverifikasi. Silakan login.");
-      } else {
-        setLoading(false);
-        setError("Registration failed. Please try again.");
-      }
-    } catch (err: any) {
-      setLoading(false);
-      setError(err?.message || "An error occurred during registration");
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    // Supabase biasanya akan mengirim email konfirmasi.
+    // data.user akan bernilai null jika signUp menggunakan email confirmation.
+    if (data.user) {
+        // Jika auto-sign-in diaktifkan, arahkan ke dashboard.
+        // Namun, praktik terbaiknya adalah memerlukan konfirmasi email.
+        const safeRedirect: Route = "/dashboard";
+        router.push(safeRedirect);
+    } else {
+        setMessage("Success! Check your email to confirm your account before logging in.");
     }
   };
 
+  // Logika Loading Placeholder saat CSR
+  if (!hydrated) {
+    return (
+      <div className="min-h-[80vh] bg-slate-50 py-16">
+        <div className="container mx-auto flex max-w-md items-center justify-center px-6">
+          <div className="h-48 w-full animate-pulse rounded-2xl border border-slate-200/80 bg-white" />
+        </div>
+      </div>
+    );
+  }
+
+  // Tampilan Halaman Register
   return (
-    <div className="min-h-[80vh] bg-slate-50 py-16">
-      <div className="container mx-auto max-w-md px-6">
-        <Link href="/" className="mb-4 inline-flex items-center text-sm font-medium text-sky-600 hover:text-sky-700">
+    <div className="min-h-screen bg-gray-100 items-center justify-center p-8">
+      <Link href="/" className="mb-4 inline-flex flex items-center text-sm font-medium text-sky-600 hover:text-sky-700">
           ← Back to homepage
-        </Link>
-        <Card className="border-slate-200/80">
-          <CardHeader>
-            <CardTitle className="text-2xl">Create your account</CardTitle>
-            <CardDescription>Join HealthSync to start your wellness journey</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={onSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700" htmlFor="email">Email</label>
-                <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+      </Link>
+      <div className="w-full max-w-5xl h-[640px] flex overflow-hidden rounded-3xl shadow-lg bg-white">
+        
+        {/* LEFT SIDE (FORM) */}
+        <div className="w-1/2 p-10 bg-white/90 backdrop-blur-lg flex flex-col justify-between rounded-3xl">
+          
+          {/* Logo + Title */}
+          <div>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-md bg-black/90 flex items-center justify-center text-white">
+                ★
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700" htmlFor="password">Password</label>
-                <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+
+              <div>
+                <h1 className="text-xl font-semibold">HealthySync</h1>
+                <p className="text-sm text-gray-500 -mt-1">
+                  Create your HealthySync account
+                </p>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700" htmlFor="confirm">Confirm password</label>
-                <Input id="confirm" type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="••••••••" />
+            </div>
+
+            {/* Switch Sign In / Sign Up */}
+            <div className="bg-white/0 rounded-full p-1 inline-flex border border-gray-200">
+           <Link href="/login" className="px-6 py-2 rounded-full text-gray-500">
+              Sign In
+           </Link>
+           <button className="px-6 py-2 bg-blue-500 text-white rounded-full">
+              Sign Up 
+             </button>
               </div>
-              {error && <p className="text-sm text-red-600">{error}</p>}
-              {info && <p className="text-sm text-sky-700">{info}</p>}
-              <Button type="submit" className="w-full bg-sky-500 text-white hover:bg-sky-600" disabled={loading}>
-                {loading ? "Creating..." : "Create Account"}
-              </Button>
-              <p className="text-center text-sm text-slate-600">
-                Already have an account? <a href="/login" className="text-sky-600 underline">Sign in</a>
-              </p>
+
+            {/* Form */}
+            <form onSubmit={onSubmit} className="mt-6 space-y-4">
+
+              {error && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative text-sm" role="alert">
+                  {error}
+                </div>
+              )}
+
+              {message && (
+                <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative text-sm" role="alert">
+                  {message}
+                </div>
+              )}
+              
+              <div className="relative">
+                <input
+                  type="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading || !!message}
+                  required
+                  className="w-full border border-gray-200 rounded-full py-3 pl-6 pr-12 
+                  focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              <div className="relative">
+                <input
+                  type="password"
+                  placeholder="Create password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading || !!message}
+                  required
+                  className="w-full border border-gray-200 rounded-full py-3 pl-6 pr-12 
+                  focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
+              </div>
+              
+              <div className="relative">
+                <input
+                  type="password"
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={loading || !!message}
+                  required
+                  className="w-full border border-gray-200 rounded-full py-3 pl-6 pr-12 
+                  focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              <div className="flex items-center justify-start text-sm text-gray-500 pt-1">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" required className="w-4 h-4" />
+                  I agree to the <a href="#" className="text-blue-500">Terms of Service</a>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || !!message}
+                className="w-full py-3 rounded-full bg-blue-500 text-white 
+                font-medium shadow-md disabled:bg-blue-300 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Processing...' : 'Register Account'}
+              </button>
             </form>
-          </CardContent>
-        </Card>
+
+            {/* Divider */}
+            <div className="my-6 flex items-center text-sm text-gray-400">
+              <div className="flex-1 h-px bg-gray-200"></div>
+              <div className="px-3">OR</div>
+              <div className="flex-1 h-px bg-gray-200"></div>
+            </div>
+
+            {/* Social Login */}
+            <div className="space-y-3">
+              <button className="w-full py-3 rounded-full bg-black text-white flex items-center justify-center gap-3">
+                Register with Apple
+              </button>
+
+              <button className="w-full py-3 rounded-full border border-gray-200 flex items-center justify-center gap-3">
+                Register with Google
+              </button>
+            </div>
+          </div>
+
+          <div className="text-xs text-gray-400">
+            © 2025 HealthySync. All right reserved
+          </div>
+        </div>
+
+        {/* RIGHT SIDE IMAGE (Sama seperti Login) */}
+        <div
+          className="w-1/2 relative flex items-end justify-center p-8 
+          bg-cover bg-center"
+          style={{
+            backgroundImage:
+              "url('https://plus.unsplash.com/premium_photo-1701701278841-2c3aeea994d1?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8d2F2eSUyMGxpbmVzfGVufDB8fDB8fHww')"
+          }}
+        >
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center text-xs text-gray-200 max-w-xs">
+            <p className="opacity-80">
+              © 2025 HealthySync. All right reserved
+            </p>
+            <p className="opacity-60 text-[11px] mt-1">
+              Unauthorized use or reproduction of any content or materials from
+              this site is prohibited.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
